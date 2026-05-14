@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大富翁 - Monopoly</title>
+<script src="vue.global.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Microsoft YaHei', sans-serif; background: #1a5c2a; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+#app { display: flex; gap: 30px; align-items: flex-start; padding: 20px; }
+
+.board { display: grid; grid-template-columns: repeat(7, 125px); grid-template-rows: repeat(7, 125px); gap: 3px; background: #c8d8c0; padding: 4px; border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+
+.cell { background: #e8f0e0; border: 1px solid #999; border-radius: 4px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 15px; cursor: default; overflow: hidden; }
+.cell.corner { background: #d8e8d0; font-weight: bold; font-size: 17px; }
+.cell.property { border-top: 4px solid #999; }
+.cell.special { background: #fff3cd; }
+.cell.go { background: #d4edda; }
+.cell.jail { background: #d0d0d0; }
+.cell.gojail { background: #f8d7da; }
+.cell.parking { background: #e0d8ff; }
+
+.cell .color-bar { position: absolute; top: 0; left: 0; right: 0; height: 5px; }
+.cell .name { font-size: 15px; font-weight: bold; text-align: center; line-height: 1.2; margin-top: 5px; }
+.cell .price { font-size: 13px; color: #555; }
+.cell .owner-dot { width: 18px; height: 18px; border-radius: 50%; position: absolute; bottom: 4px; right: 4px; border: 2px solid #555; }
+
+.cell .player-tokens { position: absolute; bottom: 3px; left: 3px; display: flex; gap: 3px; }
+.cell .token { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #333; font-size: 11px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; transition: all .3s; }
+.token.p1 { background: #e74c3c; }
+.token.p2 { background: #3498db; }
+
+.center-panel { grid-column: 2 / 7; grid-row: 2 / 7; background: #f5f0e8; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 28px; font-size: 18px; }
+
+.sidebar { display: flex; flex-direction: column; gap: 18px; min-width: 320px; }
+
+.player-card { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,.2); border-left: 8px solid #ccc; transition: all .3s; }
+.player-card.active { border-left-color: #f1c40f; box-shadow: 0 4px 20px rgba(241,196,15,.5); transform: scale(1.02); }
+.player-card.bankrupt { opacity: .5; }
+.player-card h3 { margin-bottom: 10px; font-size: 22px; }
+.player-card .money { font-size: 32px; font-weight: bold; color: #27ae60; }
+.player-card .props { font-size: 15px; color: #777; margin-top: 6px; }
+.player-card .prop-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.player-card .prop-tag { font-size: 13px; padding: 2px 10px; border-radius: 10px; color: #fff; }
+
+.dice-area { display: flex; gap: 16px; align-items: center; justify-content: center; }
+.dice { width: 72px; height: 72px; background: #fff; border-radius: 14px; border: 3px solid #333; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); padding: 8px; gap: 3px; transition: transform .2s; }
+.dice.rolling { animation: shake .3s infinite; }
+@keyframes shake { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-15deg); } 75% { transform: rotate(15deg); } }
+.dice .dot { width: 13px; height: 13px; background: #333; border-radius: 50%; justify-self: center; align-self: center; }
+
+.btn { padding: 12px 30px; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; transition: all .2s; }
+.btn:hover { transform: scale(1.05); }
+.btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.btn-roll { background: #e74c3c; color: #fff; font-size: 24px; padding: 18px 50px; }
+.btn-roll.p2 { background: #3498db; }
+.btn-buy { background: #27ae60; color: #fff; }
+.btn-skip { background: #95a5a6; color: #fff; }
+.btn-new { background: #8e44ad; color: #fff; }
+
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { background: #fff; border-radius: 20px; padding: 40px; min-width: 380px; text-align: center; box-shadow: 0 16px 48px rgba(0,0,0,.3); }
+.modal h2 { margin-bottom: 20px; font-size: 26px; }
+.modal p { margin-bottom: 16px; color: #555; font-size: 18px; }
+.modal .actions { display: flex; gap: 14px; justify-content: center; margin-top: 24px; }
+
+.log-panel { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,.2); max-height: 240px; overflow-y: auto; }
+.log-panel h4 { margin-bottom: 10px; font-size: 16px; }
+.log-item { font-size: 14px; padding: 4px 0; border-bottom: 1px solid #eee; }
+.log-item.p1-log { color: #c0392b; }
+.log-item.p2-log { color: #2980b9; }
+
+.winner-banner { font-size: 36px; font-weight: bold; color: #f1c40f; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+.boat-grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 16px; }
+.boat-option { background: #e8f4fd; border: 2px solid #3498db; border-radius: 12px; padding: 16px 22px; cursor: pointer; transition: all .2s; min-width: 150px; }
+.boat-option:hover { background: #3498db; color: #fff; transform: scale(1.05); }
+.boat-option:hover .boat-desc { color: #e0e0e0; }
+.boat-name { font-weight: bold; font-size: 17px; }
+.boat-desc { font-size: 13px; color: #888; margin-top: 3px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="board">
+    <template v-for="cell in cells" :key="cell.index">
+      <div class="cell"
+           :class="[cell.type === 'property' ? 'property' : '', cell.cssClass]"
+           :style="{ gridRow: cell.row, gridColumn: cell.col }">
+        <div v-if="cell.type === 'property'" class="color-bar" :style="{ background: cell.color }"></div>
+        <div class="name">{{ cell.name }}</div>
+        <div v-if="cell.price" class="price">${{ cell.price }}</div>
+        <div v-if="cell.owner === 1" class="owner-dot" style="background:#e74c3c"></div>
+        <div v-if="cell.owner === 2" class="owner-dot" style="background:#3498db"></div>
+        <div class="player-tokens">
+          <div v-if="player1.position === cell.index && !player1.bankrupt" class="token p1">1</div>
+          <div v-if="player2.position === cell.index && !player2.bankrupt" class="token p2">2</div>
+        </div>
+      </div>
+    </template>
+
+    <div class="center-panel">
+      <h2>🏯 杭州大富翁</h2>
+      <div class="dice-area">
+        <div class="dice" :class="{ rolling: diceRolling }">
+          <div v-if="die1>=1" class="dot" :style="dotStyle(die1)"></div>
+          <div v-if="die1>=2" class="dot" :style="dotStyle(die1,2)"></div>
+          <div v-if="die1>=3" class="dot" :style="dotStyle(die1,3)"></div>
+          <div v-if="die1>=4" class="dot" :style="dotStyle(die1,4)"></div>
+          <div v-if="die1>=5" class="dot" :style="dotStyle(die1,5)"></div>
+          <div v-if="die1>=6" class="dot" :style="dotStyle(die1,6)"></div>
+        </div>
+        <div class="dice" :class="{ rolling: diceRolling }">
+          <div v-if="die2>=1" class="dot" :style="dotStyle(die2)"></div>
+          <div v-if="die2>=2" class="dot" :style="dotStyle(die2,2)"></div>
+          <div v-if="die2>=3" class="dot" :style="dotStyle(die2,3)"></div>
+          <div v-if="die2>=4" class="dot" :style="dotStyle(die2,4)"></div>
+          <div v-if="die2>=5" class="dot" :style="dotStyle(die2,5)"></div>
+          <div v-if="die2>=6" class="dot" :style="dotStyle(die2,6)"></div>
+        </div>
+      </div>
+      <div style="font-size:18px;color:#666">点数: {{ die1 + die2 }}</div>
+      <button class="btn btn-roll" :class="currentPlayer === 2 ? 'p2' : ''"
+              :disabled="diceRolling || isMoving || gameOver || waitingAction"
+              @click="rollDice">
+        {{ currentPlayer === 1 ? '🔴 玩家1 掷骰子' : '🔵 玩家2 掷骰子' }}
+      </button>
+      <div v-if="gameOver" class="winner-banner">
+        🏆 玩家 {{ player1.bankrupt ? 2 : 1 }} 获胜！
+      </div>
+      <button class="btn btn-new" @click="resetGame" style="margin-top:4px;">新游戏</button>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="player-card" :class="{ active: currentPlayer === 1 && !gameOver, bankrupt: player1.bankrupt }">
+      <h3>🔴 玩家 1</h3>
+      <div class="money">${{ player1.money }}</div>
+      <div class="props">地产 {{ player1.properties.length }} 处</div>
+      <div class="prop-tags">
+        <span v-for="pid in player1.properties" :key="pid" class="prop-tag" :style="{ background: getCell(pid).color }">
+          {{ getCell(pid).name }}
+        </span>
+      </div>
+    </div>
+    <div class="player-card" :class="{ active: currentPlayer === 2 && !gameOver, bankrupt: player2.bankrupt }">
+      <h3>🔵 玩家 2</h3>
+      <div class="money">${{ player2.money }}</div>
+      <div class="props">地产 {{ player2.properties.length }} 处</div>
+      <div class="prop-tags">
+        <span v-for="pid in player2.properties" :key="pid" class="prop-tag" :style="{ background: getCell(pid).color }">
+          {{ getCell(pid).name }}
+        </span>
+      </div>
+    </div>
+    <div class="log-panel">
+      <h4>📋 游戏日志</h4>
+      <div v-for="(log, i) in logs.slice(-15)" :key="i" class="log-item" :class="log.player === 1 ? 'p1-log' : log.player === 2 ? 'p2-log' : ''">
+        {{ log.text }}
+      </div>
+    </div>
+  </div>
+
+  <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
+    <div class="modal">
+      <h2>{{ modalTitle }}</h2>
+      <p>{{ modalMessage }}</p>
+      <div v-if="modalType === 'buy'" class="actions">
+        <button class="btn btn-buy" @click="buyProperty">购买 (${{ modalData.price }})</button>
+        <button class="btn btn-skip" @click="skipBuy">跳过</button>
+      </div>
+      <div v-else-if="modalType === 'boat'" class="boat-grid">
+        <div v-for="d in modalData.destinations" :key="d.index"
+             class="boat-option" @click="goBoat(d.index)">
+          <div class="boat-name">{{ d.name }}</div>
+          <div class="boat-desc">{{ d.desc }}</div>
+        </div>
+      </div>
+      <div v-else-if="modalType === 'event'" class="actions">
+        <button class="btn" :class="modalData.amount >= 0 ? 'btn-buy' : 'btn-skip'" @click="handleEvent">确定</button>
+      </div>
+      <div v-else class="actions">
+        <button class="btn btn-new" @click="showModal = false; nextTurn()">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed } = Vue;
+
+createApp({
+  setup() {
+    // ---- Board cells (24 cells, 7x7 grid) ----
+    const cells = ref([
+      // index, row, col, type, name, color, price, rent, owner, cssClass
+      // ---- 底边 (右→左): 杭州东站 + 西湖区地产 ----
+      { index: 0, row: 7, col: 7, type: 'corner', name: '杭州东站', color: null, price: null, rent: null, owner: null, cssClass: 'go' },
+      { index: 1, row: 7, col: 6, type: 'property', name: '河坊街', color: '#2ecc71', price: 180, rent: 60, owner: null, cssClass: '' },
+      { index: 2, row: 7, col: 5, type: 'property', name: '南山路', color: '#2ecc71', price: 220, rent: 75, owner: null, cssClass: '' },
+      { index: 3, row: 7, col: 4, type: 'property', name: '龙井村', color: '#2ecc71', price: 260, rent: 90, owner: null, cssClass: '' },
+      { index: 4, row: 7, col: 3, type: 'special-bonus', name: '🌙 三潭印月', color: null, price: null, rent: null, owner: null, cssClass: 'special' },
+      { index: 5, row: 7, col: 2, type: 'property', name: '北山街', color: '#2ecc71', price: 300, rent: 100, owner: null, cssClass: '' },
+      { index: 6, row: 7, col: 1, type: 'corner', name: '🏯 雷峰塔', color: null, price: null, rent: null, owner: null, cssClass: 'jail' },
+      // ---- 左边 (下→上): 上城区地产 ----
+      { index: 7, row: 6, col: 1, type: 'property', name: '南宋御街', color: '#f39c12', price: 340, rent: 115, owner: null, cssClass: '' },
+      { index: 8, row: 5, col: 1, type: 'property', name: '吴山广场', color: '#f39c12', price: 380, rent: 130, owner: null, cssClass: '' },
+      { index: 9, row: 4, col: 1, type: 'chance', name: '🛕 灵隐祈福', color: null, price: null, rent: null, owner: null, cssClass: 'special' },
+      { index: 10, row: 3, col: 1, type: 'property', name: '解放路', color: '#f39c12', price: 420, rent: 145, owner: null, cssClass: '' },
+      { index: 11, row: 2, col: 1, type: 'property', name: '延安路', color: '#f39c12', price: 460, rent: 160, owner: null, cssClass: '' },
+      { index: 12, row: 1, col: 1, type: 'corner', name: '🛍️ 湖滨银泰', color: null, price: null, rent: null, owner: null, cssClass: 'parking' },
+      // ---- 顶边 (左→右): 拱墅区地产 ----
+      { index: 13, row: 1, col: 2, type: 'property', name: '西溪湿地', color: '#3498db', price: 500, rent: 175, owner: null, cssClass: '' },
+      { index: 14, row: 1, col: 3, type: 'property', name: '拱宸桥', color: '#3498db', price: 540, rent: 190, owner: null, cssClass: '' },
+      { index: 15, row: 1, col: 4, type: 'boat', name: '🚤 西湖游船', color: null, price: null, rent: null, owner: null, cssClass: 'special' },
+      { index: 16, row: 1, col: 5, type: 'property', name: '运河天地', color: '#3498db', price: 580, rent: 205, owner: null, cssClass: '' },
+      { index: 17, row: 1, col: 6, type: 'property', name: '香积寺路', color: '#3498db', price: 620, rent: 220, owner: null, cssClass: '' },
+      { index: 18, row: 1, col: 7, type: 'corner', name: '🌉 断桥残雪', color: null, price: null, rent: null, owner: null, cssClass: 'gojail' },
+      // ---- 右边 (上→下): 滨江区地产 ----
+      { index: 19, row: 2, col: 7, type: 'property', name: '钱江新城', color: '#e74c3c', price: 660, rent: 235, owner: null, cssClass: '' },
+      { index: 20, row: 3, col: 7, type: 'property', name: '奥体中心', color: '#e74c3c', price: 700, rent: 250, owner: null, cssClass: '' },
+      { index: 21, row: 4, col: 7, type: 'destiny', name: '🌊 西湖天地', color: null, price: null, rent: null, owner: null, cssClass: 'special' },
+      { index: 22, row: 5, col: 7, type: 'property', name: '星光大道', color: '#e74c3c', price: 750, rent: 265, owner: null, cssClass: '' },
+      { index: 23, row: 6, col: 7, type: 'property', name: '滨江码头', color: '#e74c3c', price: 800, rent: 280, owner: null, cssClass: '' },
+    ]);
+
+    // ---- Players ----
+    const player1 = reactive({ money: 2500, position: 0, properties: [], bankrupt: false });
+    const player2 = reactive({ money: 2500, position: 0, properties: [], bankrupt: false });
+
+    const currentPlayer = ref(1);
+    const die1 = ref(1);
+    const die2 = ref(1);
+    const diceRolling = ref(false);
+    const isMoving = ref(false);
+    const gameOver = ref(false);
+    const waitingAction = ref(false);
+
+    // ---- Modal ----
+    const showModal = ref(false);
+    const modalTitle = ref('');
+    const modalMessage = ref('');
+    const modalType = ref('');
+    const modalData = ref({});
+
+    // ---- Logs ----
+    const logs = ref([]);
+
+    function addLog(player, text) {
+      logs.value.push({ player, text });
+    }
+
+    function getCell(index) {
+      return cells.value.find(c => c.index === index) || cells.value[0];
+    }
+
+    function getPlayer(num) {
+      return num === 1 ? player1 : player2;
+    }
+
+    // ---- Color groups (same color = same group) ----
+    function getColorGroup(color) {
+      return cells.value.filter(c => c.type === 'property' && c.color === color);
+    }
+
+    function ownsFullColorGroup(playerNum, color) {
+      const group = getColorGroup(color);
+      return group.every(c => c.owner === playerNum);
+    }
+
+    // ---- Dice dot positions ----
+    function dotStyle(dieNum, dotIdx) {
+      if (!dotIdx) dotIdx = 1;
+      const positions = {
+        1: [{ row: 2, col: 2 }],
+        2: [{ row: 1, col: 3 }, { row: 3, col: 1 }],
+        3: [{ row: 1, col: 3 }, { row: 2, col: 2 }, { row: 3, col: 1 }],
+        4: [{ row: 1, col: 1 }, { row: 1, col: 3 }, { row: 3, col: 1 }, { row: 3, col: 3 }],
+        5: [{ row: 1, col: 1 }, { row: 1, col: 3 }, { row: 2, col: 2 }, { row: 3, col: 1 }, { row: 3, col: 3 }],
+        6: [{ row: 1, col: 1 }, { row: 1, col: 3 }, { row: 2, col: 1 }, { row: 2, col: 3 }, { row: 3, col: 1 }, { row: 3, col: 3 }],
+      };
+      const pos = positions[dieNum]?.[dotIdx - 1];
+      return pos ? { gridRow: pos.row, gridColumn: pos.col } : { display: 'none' };
+    }
+
+    // ---- Roll dice ----
+    function rollDice() {
+      if (diceRolling.value || gameOver.value || waitingAction.value) return;
+      diceRolling.value = true;
+
+      let count = 0;
+      const interval = setInterval(() => {
+        die1.value = Math.floor(Math.random() * 6) + 1;
+        die2.value = Math.floor(Math.random() * 6) + 1;
+        count++;
+        if (count >= 8) {
+          clearInterval(interval);
+          die1.value = Math.floor(Math.random() * 6) + 1;
+          die2.value = Math.floor(Math.random() * 6) + 1;
+          diceRolling.value = false;
+          startStepMove();
+        }
+      }, 100);
+    }
+
+    // ---- Step-by-step move ----
+    function startStepMove() {
+      const player = getPlayer(currentPlayer.value);
+      const steps = die1.value + die2.value;
+      addLog(currentPlayer.value, `掷出 ${steps} 点`);
+      isMoving.value = true;
+
+      let moved = 0;
+      const interval = setInterval(() => {
+        moved++;
+        const oldPos = player.position;
+        const newPos = (oldPos + 1) % cells.value.length;
+
+        // Check if passed GO
+        if (newPos < oldPos) {
+          player.money += 300;
+          addLog(currentPlayer.value, `经过杭州东站，获得 $300`);
+        }
+
+        player.position = newPos;
+
+        if (moved >= steps) {
+          clearInterval(interval);
+          isMoving.value = false;
+          const cell = getCell(newPos);
+          addLog(currentPlayer.value, `到达 ${cell.name}`);
+          handleCellEffect(cell);
+        }
+      }, 180);
+    }
+
+    // ---- Handle cell effects ----
+    function handleCellEffect(cell) {
+      const player = getPlayer(currentPlayer.value);
+
+      if (cell.type === 'corner') {
+        if (cell.index === 0) {
+          addLog(currentPlayer.value, `抵达杭州东站`);
+          nextTurn();
+        } else if (cell.index === 18) {
+          player.position = 6; // 断桥残雪 → 雷峰塔
+          addLog(currentPlayer.value, `断桥残雪，被送入雷峰塔！`);
+          nextTurn();
+        } else {
+          addLog(currentPlayer.value, cell.index === 6 ? `在雷峰塔下徘徊` : `逛湖滨银泰，休息一下`);
+          nextTurn();
+        }
+      } else if (cell.type === 'special-bonus') {
+        // 三潭印月：获得奖金
+        const bonus = 250;
+        player.money += bonus;
+        addLog(currentPlayer.value, `三潭印月赏月，获得 $${bonus}！`);
+        nextTurn();
+      } else if (cell.type === 'boat') {
+        // 西湖游船：选择目的地传送
+        showBoatModal();
+      } else if (cell.type === 'property') {
+        if (cell.owner === null) {
+          if (player.money >= cell.price) {
+            showBuyModal(cell);
+          } else {
+            addLog(currentPlayer.value, `资金不足，无法购买 ${cell.name}`);
+            nextTurn();
+          }
+        } else if (cell.owner === currentPlayer.value) {
+          addLog(currentPlayer.value, `自己的地产，无需付费`);
+          nextTurn();
+        } else {
+          // Pay rent
+          let rent = cell.rent;
+          if (ownsFullColorGroup(cell.owner, cell.color)) {
+            rent *= 2;
+            addLog(cell.owner, `拥有整个区域，租金翻倍！`);
+          }
+          player.money -= rent;
+          getPlayer(cell.owner).money += rent;
+          addLog(currentPlayer.value, `向玩家${cell.owner}支付 $${rent} 租金`);
+          checkBankrupt();
+        }
+      } else if (cell.type === 'chance' || cell.type === 'destiny') {
+        showEventModal(cell);
+      }
+    }
+
+    // ---- Buy modal ----
+    function showBuyModal(cell) {
+      waitingAction.value = true;
+      modalTitle.value = '购买地产';
+      modalMessage.value = `${cell.name} — 价格: $${cell.price}，租金: $${cell.rent}`;
+      modalType.value = 'buy';
+      modalData.value = { index: cell.index, price: cell.price };
+      showModal.value = true;
+    }
+
+    function buyProperty() {
+      const cell = getCell(modalData.value.index);
+      const player = getPlayer(currentPlayer.value);
+      if (player.money >= cell.price) {
+        player.money -= cell.price;
+        cell.owner = currentPlayer.value;
+        player.properties.push(cell.index);
+        addLog(currentPlayer.value, `购买了 ${cell.name} ($${cell.price})`);
+      }
+      showModal.value = false;
+      waitingAction.value = false;
+      nextTurn();
+    }
+
+    function skipBuy() {
+      addLog(currentPlayer.value, `放弃购买`);
+      showModal.value = false;
+      waitingAction.value = false;
+      nextTurn();
+    }
+
+    // ---- Event modal (chance/destiny) ----
+    function showEventModal(cell) {
+      waitingAction.value = true;
+      const events = [
+        { text: '灵隐寺祈福显灵，获得香火钱', amount: 200 },
+        { text: '西湖龙井拍卖，茶价大涨！', amount: 300 },
+        { text: '钱塘江大潮观礼收入', amount: 250 },
+        { text: '雷峰塔修缮，募捐功德', amount: -150 },
+        { text: '河坊街被偷了钱包！', amount: -180 },
+        { text: '西湖醋鱼吃坏了肚子，医药费', amount: -100 },
+        { text: '宋城千古情演出分红', amount: 180 },
+        { text: '丝绸城购物退税', amount: 150 },
+        { text: '苏堤春晓，收到红包', amount: 120 },
+        { text: '梅家坞茶庄缴税', amount: -120 },
+        { text: '钱江新城投资分红', amount: 280 },
+        { text: '南山路酒吧被投诉罚款', amount: -200 },
+      ];
+      const evt = events[Math.floor(Math.random() * events.length)];
+      modalTitle.value = cell.type === 'chance' ? '🛕 灵隐祈福' : '🌊 西湖天地';
+      modalMessage.value = evt.text + (evt.amount >= 0 ? ` (+$${evt.amount})` : ` (-$${Math.abs(evt.amount)})`);
+      modalType.value = 'event';
+      modalData.value = { amount: evt.amount };
+      showModal.value = true;
+    }
+
+    // ---- Boat modal (西湖游船) ----
+    const boatDestinations = [
+      { index: 0, name: '杭州东站', desc: '领取 $300 过路费' },
+      { index: 4, name: '三潭印月', desc: '获得 $250 赏月奖金' },
+      { index: 12, name: '湖滨银泰', desc: '逛街休息' },
+      { index: 9, name: '灵隐祈福', desc: '抽取祈福卡' },
+      { index: 20, name: '奥体中心', desc: '黄金地段' },
+      { index: 3, name: '龙井村', desc: '西湖区核心地块' },
+    ];
+
+    function showBoatModal() {
+      waitingAction.value = true;
+      modalTitle.value = '🚤 西湖游船';
+      modalMessage.value = '乘坐游船，选择一个目的地：';
+      modalType.value = 'boat';
+      modalData.value = { destinations: boatDestinations };
+      showModal.value = true;
+    }
+
+    function goBoat(destIndex) {
+      const player = getPlayer(currentPlayer.value);
+      player.position = destIndex;
+      addLog(currentPlayer.value, `乘坐游船前往 ${getCell(destIndex).name}`);
+      showModal.value = false;
+      waitingAction.value = false;
+      // 触发目的地的效果
+      handleCellEffect(getCell(destIndex));
+    }
+
+    function handleEvent() {
+      const player = getPlayer(currentPlayer.value);
+      player.money += modalData.value.amount;
+      addLog(currentPlayer.value, modalData.value.amount >= 0
+        ? `获得 $${modalData.value.amount}`
+        : `支付 $${Math.abs(modalData.value.amount)}`);
+      showModal.value = false;
+      waitingAction.value = false;
+      checkBankrupt();
+    }
+
+    // ---- Bankruptcy check ----
+    function checkBankrupt() {
+      const player = getPlayer(currentPlayer.value);
+      if (player.money < 0) {
+        player.bankrupt = true;
+        const winner = currentPlayer.value === 1 ? 2 : 1;
+        addLog(currentPlayer.value, `破产了！`);
+        addLog(winner, `获胜！`);
+        gameOver.value = true;
+        waitingAction.value = false;
+        showModal.value = false;
+      } else {
+        nextTurn();
+      }
+    }
+
+    // ---- Next turn ----
+    function nextTurn() {
+      if (gameOver.value) return;
+      currentPlayer.value = currentPlayer.value === 1 ? 2 : 1;
+
+      // Skip bankrupt player
+      const next = getPlayer(currentPlayer.value);
+      if (next.bankrupt) {
+        gameOver.value = true;
+        const winner = currentPlayer.value === 1 ? 2 : 1;
+        addLog(winner, `获胜！`);
+      }
+    }
+
+    // ---- Reset ----
+    function resetGame() {
+      player1.money = 2500;
+      player1.position = 0;
+      player1.properties = [];
+      player1.bankrupt = false;
+      player2.money = 2500;
+      player2.position = 0;
+      player2.properties = [];
+      player2.bankrupt = false;
+      currentPlayer.value = 1;
+      die1.value = 1;
+      die2.value = 1;
+      diceRolling.value = false;
+      gameOver.value = false;
+      waitingAction.value = false;
+      showModal.value = false;
+      logs.value = [];
+      cells.value.forEach(c => { if (c.type === 'property') c.owner = null; });
+      addLog(0, '新游戏开始！每位玩家 $2500，杭州之旅启程~');
+    }
+
+    // Init
+    addLog(0, '欢迎来到杭州大富翁！玩家1先手。');
+
+    return {
+      cells, player1, player2, currentPlayer, die1, die2, diceRolling,
+      isMoving, gameOver, waitingAction, showModal, modalTitle, modalMessage,
+      modalType, modalData, logs,
+      dotStyle, rollDice, buyProperty, skipBuy, handleEvent, goBoat, resetGame,
+      nextTurn, getCell,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
