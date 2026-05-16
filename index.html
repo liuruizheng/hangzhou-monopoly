@@ -30,6 +30,8 @@ body { font-family: 'Microsoft YaHei', sans-serif; background: #1a5c2a; min-heig
 .cell .token { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #333; font-size: 11px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; transition: all .3s; }
 .token.p1 { background: #e74c3c; }
 .token.p2 { background: #3498db; }
+.token.p3 { background: #27ae60; }
+.token.p4 { background: #e67e22; }
 
 .center-panel { grid-column: 2 / 7; grid-row: 2 / 7; background: #f5f0e8; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 28px; font-size: 18px; }
 
@@ -38,6 +40,10 @@ body { font-family: 'Microsoft YaHei', sans-serif; background: #1a5c2a; min-heig
 .player-card { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,.2); border-left: 8px solid #ccc; transition: all .3s; }
 .player-card.active { border-left-color: #f1c40f; box-shadow: 0 4px 20px rgba(241,196,15,.5); transform: scale(1.02); }
 .player-card.bankrupt { opacity: .5; }
+.player-card.p1 { border-left-color: #e74c3c; }
+.player-card.p2 { border-left-color: #3498db; }
+.player-card.p3 { border-left-color: #27ae60; }
+.player-card.p4 { border-left-color: #e67e22; }
 .player-card h3 { margin-bottom: 10px; font-size: 22px; }
 .player-card .money { font-size: 32px; font-weight: bold; color: #27ae60; }
 .player-card .props { font-size: 15px; color: #777; margin-top: 6px; }
@@ -55,6 +61,8 @@ body { font-family: 'Microsoft YaHei', sans-serif; background: #1a5c2a; min-heig
 .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 .btn-roll { background: #e74c3c; color: #fff; font-size: 24px; padding: 18px 50px; }
 .btn-roll.p2 { background: #3498db; }
+.btn-roll.p3 { background: #27ae60; }
+.btn-roll.p4 { background: #e67e22; }
 .btn-buy { background: #27ae60; color: #fff; }
 .btn-skip { background: #95a5a6; color: #fff; }
 .btn-new { background: #8e44ad; color: #fff; }
@@ -70,6 +78,8 @@ body { font-family: 'Microsoft YaHei', sans-serif; background: #1a5c2a; min-heig
 .log-item { font-size: 14px; padding: 4px 0; border-bottom: 1px solid #eee; }
 .log-item.p1-log { color: #c0392b; }
 .log-item.p2-log { color: #2980b9; }
+.log-item.p3-log { color: #27ae60; }
+.log-item.p4-log { color: #e67e22; }
 
 .winner-banner { font-size: 36px; font-weight: bold; color: #f1c40f; animation: pulse 1s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
@@ -80,10 +90,37 @@ body { font-family: 'Microsoft YaHei', sans-serif; background: #1a5c2a; min-heig
 .boat-option:hover .boat-desc { color: #e0e0e0; }
 .boat-name { font-weight: bold; font-size: 17px; }
 .boat-desc { font-size: 13px; color: #888; margin-top: 3px; }
+
+.setup-options { display: flex; gap: 16px; justify-content: center; margin: 10px 0 20px; }
+.setup-btn { width: 80px; height: 80px; border-radius: 16px; border: 3px solid #ddd; background: #f9f9f9; cursor: pointer; transition: all .2s; font-size: 28px; font-weight: bold; color: #555; }
+.setup-btn:hover { transform: scale(1.08); border-color: #aaa; }
+.setup-btn.selected { border-color: #f1c40f; background: #fffde6; transform: scale(1.08); box-shadow: 0 0 16px rgba(241,196,15,.4); }
+.setup-btn .player-count { font-size: 13px; color: #999; margin-top: 2px; }
 </style>
 </head>
 <body>
 <div id="app">
+
+  <!-- Setup Modal -->
+  <div v-if="!gameStarted" class="modal-overlay">
+    <div class="modal">
+      <h2>🏯 杭州大富翁</h2>
+      <p style="margin-bottom:6px;color:#555;">选择玩家人数</p>
+      <div class="setup-options">
+        <div v-for="n in [2,3,4]" :key="n" class="setup-btn"
+             :class="{ selected: playerCount === n }"
+             @click="playerCount = n">
+          <div style="font-size:32px;">{{ n }}</div>
+          <div class="player-count">{{ n }}人</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-roll" @click="startGame(playerCount)">开始游戏</button>
+        <button v-if="players.length > 0" class="btn btn-skip" @click="gameStarted = true">取消</button>
+      </div>
+    </div>
+  </div>
+
   <div class="board">
     <template v-for="cell in cells" :key="cell.index">
       <div class="cell"
@@ -92,11 +129,12 @@ body { font-family: 'Microsoft YaHei', sans-serif; background: #1a5c2a; min-heig
         <div v-if="cell.type === 'property'" class="color-bar" :style="{ background: cell.color }"></div>
         <div class="name">{{ cell.name }}</div>
         <div v-if="cell.price" class="price">${{ cell.price }}</div>
-        <div v-if="cell.owner === 1" class="owner-dot" style="background:#e74c3c"></div>
-        <div v-if="cell.owner === 2" class="owner-dot" style="background:#3498db"></div>
+        <div v-if="cell.owner" class="owner-dot" :style="{ background: getPlayerColor(cell.owner) }"></div>
         <div class="player-tokens">
-          <div v-if="player1.position === cell.index && !player1.bankrupt" class="token p1">1</div>
-          <div v-if="player2.position === cell.index && !player2.bankrupt" class="token p2">2</div>
+          <template v-for="(p, i) in players" :key="i">
+            <div v-if="p.position === cell.index && !p.bankrupt"
+                 class="token" :class="'p' + (i + 1)">{{ i + 1 }}</div>
+          </template>
         </div>
       </div>
     </template>
@@ -122,42 +160,33 @@ body { font-family: 'Microsoft YaHei', sans-serif; background: #1a5c2a; min-heig
         </div>
       </div>
       <div style="font-size:18px;color:#666">点数: {{ die1 + die2 }}</div>
-      <button class="btn btn-roll" :class="currentPlayer === 2 ? 'p2' : ''"
+      <button class="btn btn-roll" :class="'p' + currentPlayer"
               :disabled="diceRolling || isMoving || gameOver || waitingAction"
               @click="rollDice">
-        {{ currentPlayer === 1 ? '🔴 玩家1 掷骰子' : '🔵 玩家2 掷骰子' }}
+        {{ getPlayerIcon(currentPlayer) }} {{ getPlayerName(currentPlayer) }} 掷骰子
       </button>
       <div v-if="gameOver" class="winner-banner">
-        🏆 玩家 {{ player1.bankrupt ? 2 : 1 }} 获胜！
+        🏆 {{ getPlayerName(players.findIndex(p => !p.bankrupt) + 1) }} 获胜！
       </div>
       <button class="btn btn-new" @click="resetGame" style="margin-top:4px;">新游戏</button>
     </div>
   </div>
 
   <div class="sidebar">
-    <div class="player-card" :class="{ active: currentPlayer === 1 && !gameOver, bankrupt: player1.bankrupt }">
-      <h3>🔴 玩家 1</h3>
-      <div class="money">${{ player1.money }}</div>
-      <div class="props">地产 {{ player1.properties.length }} 处</div>
+    <div v-for="(p, i) in players" :key="i" class="player-card"
+         :class="['p' + (i + 1), { active: currentPlayer === (i + 1) && !gameOver, bankrupt: p.bankrupt }]">
+      <h3>{{ getPlayerIcon(i + 1) }} {{ getPlayerName(i + 1) }}</h3>
+      <div class="money">${{ p.money }}</div>
+      <div class="props">地产 {{ p.properties.length }} 处</div>
       <div class="prop-tags">
-        <span v-for="pid in player1.properties" :key="pid" class="prop-tag" :style="{ background: getCell(pid).color }">
-          {{ getCell(pid).name }}
-        </span>
-      </div>
-    </div>
-    <div class="player-card" :class="{ active: currentPlayer === 2 && !gameOver, bankrupt: player2.bankrupt }">
-      <h3>🔵 玩家 2</h3>
-      <div class="money">${{ player2.money }}</div>
-      <div class="props">地产 {{ player2.properties.length }} 处</div>
-      <div class="prop-tags">
-        <span v-for="pid in player2.properties" :key="pid" class="prop-tag" :style="{ background: getCell(pid).color }">
+        <span v-for="pid in p.properties" :key="pid" class="prop-tag" :style="{ background: getCell(pid).color }">
           {{ getCell(pid).name }}
         </span>
       </div>
     </div>
     <div class="log-panel">
       <h4>📋 游戏日志</h4>
-      <div v-for="(log, i) in logs.slice(-15)" :key="i" class="log-item" :class="log.player === 1 ? 'p1-log' : log.player === 2 ? 'p2-log' : ''">
+      <div v-for="(log, i) in logs.slice(-15)" :key="i" class="log-item" :class="log.player ? 'p' + log.player + '-log' : ''">
         {{ log.text }}
       </div>
     </div>
@@ -226,9 +255,18 @@ createApp({
       { index: 23, row: 6, col: 7, type: 'property', name: '滨江码头', color: '#e74c3c', price: 800, rent: 280, owner: null, cssClass: '' },
     ]);
 
-    // ---- Players ----
-    const player1 = reactive({ money: 2500, position: 0, properties: [], bankrupt: false });
-    const player2 = reactive({ money: 2500, position: 0, properties: [], bankrupt: false });
+    // ---- Player config ----
+    const playerConfig = [
+      { color: '#e74c3c', bg: '#e74c3c', icon: '🔴', name: '玩家 1' },
+      { color: '#3498db', bg: '#3498db', icon: '🔵', name: '玩家 2' },
+      { color: '#27ae60', bg: '#27ae60', icon: '🟢', name: '玩家 3' },
+      { color: '#e67e22', bg: '#e67e22', icon: '🟠', name: '玩家 4' },
+    ];
+
+    // ---- Players (initialized in startGame) ----
+    const players = reactive([]);
+    const playerCount = ref(2);
+    const gameStarted = ref(false);
 
     const currentPlayer = ref(1);
     const die1 = ref(1);
@@ -257,7 +295,19 @@ createApp({
     }
 
     function getPlayer(num) {
-      return num === 1 ? player1 : player2;
+      return players[num - 1];
+    }
+
+    function getPlayerColor(num) {
+      return playerConfig[num - 1].color;
+    }
+
+    function getPlayerIcon(num) {
+      return playerConfig[num - 1].icon;
+    }
+
+    function getPlayerName(num) {
+      return playerConfig[num - 1].name;
     }
 
     // ---- Color groups (same color = same group) ----
@@ -490,12 +540,19 @@ createApp({
       const player = getPlayer(currentPlayer.value);
       if (player.money < 0) {
         player.bankrupt = true;
-        const winner = currentPlayer.value === 1 ? 2 : 1;
         addLog(currentPlayer.value, `破产了！`);
-        addLog(winner, `获胜！`);
-        gameOver.value = true;
         waitingAction.value = false;
         showModal.value = false;
+
+        // Check if only one player remains
+        const alive = players.filter(p => !p.bankrupt);
+        if (alive.length <= 1) {
+          const winner = players.indexOf(alive[0]) + 1;
+          addLog(winner, `获胜！`);
+          gameOver.value = true;
+        } else {
+          nextTurn();
+        }
       } else {
         nextTurn();
       }
@@ -504,48 +561,61 @@ createApp({
     // ---- Next turn ----
     function nextTurn() {
       if (gameOver.value) return;
-      currentPlayer.value = currentPlayer.value === 1 ? 2 : 1;
 
-      // Skip bankrupt player
-      const next = getPlayer(currentPlayer.value);
-      if (next.bankrupt) {
-        gameOver.value = true;
-        const winner = currentPlayer.value === 1 ? 2 : 1;
-        addLog(winner, `获胜！`);
+      // Find next non-bankrupt player
+      let next = currentPlayer.value;
+      for (let i = 0; i < playerCount.value; i++) {
+        next = (next % playerCount.value) + 1;
+        if (!getPlayer(next).bankrupt) break;
       }
+
+      // Check if only one player left
+      const alive = players.filter(p => !p.bankrupt);
+      if (alive.length <= 1) {
+        gameOver.value = true;
+        const winner = players.indexOf(alive[0]) + 1;
+        addLog(winner, `获胜！`);
+        return;
+      }
+
+      currentPlayer.value = next;
     }
 
-    // ---- Reset ----
+    // ---- Reset / New Game ----
     function resetGame() {
-      player1.money = 2500;
-      player1.position = 0;
-      player1.properties = [];
-      player1.bankrupt = false;
-      player2.money = 2500;
-      player2.position = 0;
-      player2.properties = [];
-      player2.bankrupt = false;
+      gameOver.value = false;
+      gameStarted.value = false;
+    }
+
+    function startGame(count) {
+      playerCount.value = count;
+      // Reset players array
+      players.length = 0;
+      for (let i = 0; i < count; i++) {
+        players.push({ money: 2500, position: 0, properties: [], bankrupt: false });
+      }
       currentPlayer.value = 1;
       die1.value = 1;
       die2.value = 1;
       diceRolling.value = false;
+      isMoving.value = false;
       gameOver.value = false;
       waitingAction.value = false;
       showModal.value = false;
       logs.value = [];
       cells.value.forEach(c => { if (c.type === 'property') c.owner = null; });
-      addLog(0, '新游戏开始！每位玩家 $2500，杭州之旅启程~');
+      gameStarted.value = true;
+      addLog(0, `${count}人游戏开始！每位玩家 $2500，杭州之旅启程~`);
+      addLog(1, `玩家1先手`);
     }
 
-    // Init
-    addLog(0, '欢迎来到杭州大富翁！玩家1先手。');
-
     return {
-      cells, player1, player2, currentPlayer, die1, die2, diceRolling,
+      cells, players, playerConfig, playerCount, gameStarted,
+      currentPlayer, die1, die2, diceRolling,
       isMoving, gameOver, waitingAction, showModal, modalTitle, modalMessage,
       modalType, modalData, logs,
       dotStyle, rollDice, buyProperty, skipBuy, handleEvent, goBoat, resetGame,
-      nextTurn, getCell,
+      startGame, nextTurn, getCell, getPlayerColor, getPlayerIcon, getPlayerName,
     };
   }
 }).mount('#app');
